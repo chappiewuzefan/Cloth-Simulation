@@ -1,0 +1,31 @@
+module load papi
+mkdir build
+cd build/
+module load cmake
+module load intel-compiler
+cmake ..
+make -j 64
+
+// 以下是用作分析用的 最好是结合intel-compiler，intel-compiler 会有个分析说哪些地方没有vectorized
+// The opengl_main is the one with visualization whilst kernel_main just prints the energies.
+module load intel-advisor
+advixe-cl --collect survey --project-dir ./adv_results --search-dir src:=../ --search-dir bin:=./ -- ./kernel_vect_omp
+advixe-gui &
+
+// roofline 分析
+qsub -I -P c07 -q normal -l walltime=00:15:00,mem=190GB,jobfs=100GB,ncpus=48
+module load intel-advisor
+export ADVIXE_EXPERIMENTAL=int_roofline
+// 这里如果有openmp用就加上
+export OMP_NUM_THREADS=<num_threads>
+advixe-cl --collect survey --project-dir ./adv_results --search-dir src:=../ --search-dir bin:=./ -- ./kernel_opt
+advixe-cl --collect tripcounts -flop -enable-cache-simulation --project-dir ./adv_results --search-dir src:=../ --search-dir bin:=./ -- ./kernel_opt
+advixe-gui &
+
+sqrt root pow symmetric() 会比较花费时间
+
+time ./kernel_main -n 1000
+time ./kernel_opt -n 1000
+time ./kernel_sse -n 1000
+time ./kernel_vect_omp -n 1000
+time ./kernel_omp -n 1000
